@@ -12,7 +12,7 @@ from urllib.parse import quote
 CSV_NAME = "_jb_debug_inference_20260616_164810.csv"
 HTML_NAME = "index.html"
 SVG_NAME = "overview_curve_pic.svg"
-APP_TITLE = "BED debug inference curve viewer v02 (windows)"
+APP_TITLE = "BED debug inference curve viewer v03 (windows)"
 APP_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
 <rect width="64" height="64" rx="14" fill="#111827"/>
 <circle cx="32" cy="32" r="25" fill="#2563eb"/>
@@ -328,6 +328,52 @@ def make_html(rows, html_path):
       border-radius: 50%;
       display: inline-block;
     }}
+    .csv-dialog {{
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(15, 23, 42, .42);
+    }}
+    .csv-dialog[hidden] {{ display: none; }}
+    .csv-dialog-panel {{
+      width: min(680px, 100%);
+      max-height: min(74vh, 620px);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: #fff;
+      border: 1px solid #c6d0d8;
+      border-radius: 8px;
+      box-shadow: 0 18px 55px rgba(15, 23, 42, .24);
+      overflow: hidden;
+    }}
+    .csv-dialog-head {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }}
+    .csv-dialog-title {{
+      font-weight: 700;
+      font-size: 15px;
+    }}
+    .csv-dialog-list {{
+      display: grid;
+      gap: 7px;
+      padding: 12px;
+      overflow: auto;
+    }}
+    .csv-dialog-list button {{
+      width: 100%;
+      height: auto;
+      min-height: 36px;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }}
     @media (max-width: 760px) {{
       header {{ grid-template-columns: 1fr; }}
       .toolbar {{ justify-content: flex-start; }}
@@ -384,6 +430,15 @@ def make_html(rows, html_path):
       <span class="item"><span class="box"></span>current_name != final_name</span>
     </section>
   </main>
+  <div id="githubCsvDialog" class="csv-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="githubCsvDialogTitle">
+    <div class="csv-dialog-panel">
+      <div class="csv-dialog-head">
+        <div id="githubCsvDialogTitle" class="csv-dialog-title">Select GitHub CSV</div>
+        <button id="githubCsvCloseBtn" type="button">Close</button>
+      </div>
+      <div id="githubCsvList" class="csv-dialog-list"></div>
+    </div>
+  </div>
   <script>
     let rows = {data_json};
     const csvFiles = {csv_files_json};
@@ -405,6 +460,9 @@ def make_html(rows, html_path):
     const csvFile = document.getElementById("csvFile");
     const githubRepoBtn = document.getElementById("githubRepoBtn");
     const dropboxLinkBtn = document.getElementById("dropboxLinkBtn");
+    const githubCsvDialog = document.getElementById("githubCsvDialog");
+    const githubCsvList = document.getElementById("githubCsvList");
+    const githubCsvCloseBtn = document.getElementById("githubCsvCloseBtn");
     const folderFileSelect = document.getElementById("folderFileSelect");
     const openFolderFileBtn = document.getElementById("openFolderFileBtn");
     const followMode = document.getElementById("followMode");
@@ -648,23 +706,25 @@ def make_html(rows, html_path):
       fetchCsvUrl(githubRawBase + fileUrl(fileName), `GitHub: ${{fileName}}`);
     }}
 
-    function chooseCsvFile(sourceName) {{
+    function showGithubCsvDialog() {{
       const choices = csvFiles.filter(fileName => fileName.toLowerCase().endsWith(".csv"));
       if (!choices.length) {{
         readout.textContent = "No CSV files are listed in this viewer";
-        return "";
+        return;
       }}
-      const currentIndex = Math.max(0, choices.indexOf(folderFileSelect.value));
-      const menu = choices.map((fileName, index) => `${{index + 1}}. ${{fileName}}`).join("\\n");
-      const answer = prompt(`${{sourceName}} CSV file number:\\n\\n${{menu}}`, String(currentIndex + 1));
-      if (answer === null) return "";
-      const selectedIndex = Number(answer.trim()) - 1;
-      if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= choices.length) {{
-        readout.textContent = "CSV selection canceled: invalid file number";
-        return "";
+      githubCsvList.innerHTML = "";
+      for (const fileName of choices) {{
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = fileName;
+        button.addEventListener("click", () => {{
+          folderFileSelect.value = fileName;
+          githubCsvDialog.hidden = true;
+          openGithubFile(fileName);
+        }});
+        githubCsvList.appendChild(button);
       }}
-      folderFileSelect.value = choices[selectedIndex];
-      return choices[selectedIndex];
+      githubCsvDialog.hidden = false;
     }}
 
     function normalizeDropboxUrl(url) {{
@@ -1035,8 +1095,15 @@ def make_html(rows, html_path):
     }});
 
     githubRepoBtn.addEventListener("click", () => {{
-      const fileName = chooseCsvFile("GitHub repo");
-      if (fileName) openGithubFile(fileName);
+      showGithubCsvDialog();
+    }});
+
+    githubCsvCloseBtn.addEventListener("click", () => {{
+      githubCsvDialog.hidden = true;
+    }});
+
+    githubCsvDialog.addEventListener("click", (event) => {{
+      if (event.target === githubCsvDialog) githubCsvDialog.hidden = true;
     }});
 
     dropboxLinkBtn.addEventListener("click", () => {{
