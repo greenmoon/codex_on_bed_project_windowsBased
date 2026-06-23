@@ -6,12 +6,18 @@ import csv
 import html
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 
 CSV_NAME = "_jb_debug_inference_20260616_164810.csv"
 HTML_NAME = "index.html"
 SVG_NAME = "overview_curve_pic.svg"
 APP_TITLE = "BED debug inference curve viewer v02 (windows)"
+APP_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<rect width="64" height="64" rx="14" fill="#111827"/>
+<circle cx="32" cy="32" r="25" fill="#2563eb"/>
+<text x="32" y="43" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="42" font-weight="800" fill="#ffffff">c</text>
+</svg>"""
 STATE_ORDER = ["EMP", "IBD", "ALT", "NBD", "BTH"]
 STATE_TO_Y = {name: idx for idx, name in enumerate(STATE_ORDER)}
 
@@ -116,6 +122,7 @@ def make_overview_svg(rows, svg_path):
 
 def make_html(rows, html_path):
     data_json = json.dumps(rows, separators=(",", ":"))
+    favicon_href = "data:image/svg+xml," + quote(APP_ICON_SVG)
     csv_files = sorted(
         path.name
         for path in html_path.parent.iterdir()
@@ -132,6 +139,8 @@ def make_html(rows, html_path):
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{APP_TITLE}</title>
+  <link rel="icon" type="image/svg+xml" href="{favicon_href}">
+  <meta name="theme-color" content="#111827">
   <style>
     :root {{
       color-scheme: light;
@@ -639,6 +648,25 @@ def make_html(rows, html_path):
       fetchCsvUrl(githubRawBase + fileUrl(fileName), `GitHub: ${{fileName}}`);
     }}
 
+    function chooseCsvFile(sourceName) {{
+      const choices = csvFiles.filter(fileName => fileName.toLowerCase().endsWith(".csv"));
+      if (!choices.length) {{
+        readout.textContent = "No CSV files are listed in this viewer";
+        return "";
+      }}
+      const currentIndex = Math.max(0, choices.indexOf(folderFileSelect.value));
+      const menu = choices.map((fileName, index) => `${{index + 1}}. ${{fileName}}`).join("\\n");
+      const answer = prompt(`${{sourceName}} CSV file number:\\n\\n${{menu}}`, String(currentIndex + 1));
+      if (answer === null) return "";
+      const selectedIndex = Number(answer.trim()) - 1;
+      if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= choices.length) {{
+        readout.textContent = "CSV selection canceled: invalid file number";
+        return "";
+      }}
+      folderFileSelect.value = choices[selectedIndex];
+      return choices[selectedIndex];
+    }}
+
     function normalizeDropboxUrl(url) {{
       const trimmed = url.trim();
       if (!trimmed) return "";
@@ -1007,7 +1035,8 @@ def make_html(rows, html_path):
     }});
 
     githubRepoBtn.addEventListener("click", () => {{
-      openGithubFile(folderFileSelect.value);
+      const fileName = chooseCsvFile("GitHub repo");
+      if (fileName) openGithubFile(fileName);
     }});
 
     dropboxLinkBtn.addEventListener("click", () => {{
