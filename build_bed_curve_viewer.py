@@ -336,10 +336,10 @@ def make_html(rows, html_path):
       <div id="datasetInfo" class="sub">{title} · {len(rows)} rows · fn {min_fn} to {max_fn}</div>
     </div>
     <div class="toolbar">
-      <label class="file-button" title="Select another BED debug CSV">
-        /codex_on_bed_project_windowsBased/
-        <input id="csvFile" type="file" accept=".csv,text/csv">
-      </label>
+      <button id="localPcBtn" type="button" title="Read CSV from this Windows PC">1 Local PC</button>
+      <input id="csvFile" type="file" accept=".csv,text/csv" hidden>
+      <button id="githubRepoBtn" type="button" title="Read selected CSV from GitHub repository">2 GitHub repo</button>
+      <button id="dropboxLinkBtn" type="button" title="Read CSV from a Dropbox shared link">3 Dropbox link</button>
       <select id="folderFileSelect" class="folder-select" title="CSV files in this folder"></select>
       <button id="openFolderFileBtn" type="button">Load CSV</button>
       <select id="followMode" title="Slider behavior">
@@ -378,6 +378,7 @@ def make_html(rows, html_path):
   <script>
     let rows = {data_json};
     const csvFiles = {csv_files_json};
+    const githubRawBase = "https://raw.githubusercontent.com/greenmoon/codex_on_bed_project_windowsBased/main/";
     const stateOrder = {json.dumps(STATE_ORDER)};
     const stateToY = Object.fromEntries(stateOrder.map((name, i) => [name, i]));
     const fnDurationMs = 80;
@@ -391,7 +392,10 @@ def make_html(rows, html_path):
     const readout = document.getElementById("pointReadout");
     const datasetInfo = document.getElementById("datasetInfo");
     const statePercentages = document.getElementById("statePercentages");
+    const localPcBtn = document.getElementById("localPcBtn");
     const csvFile = document.getElementById("csvFile");
+    const githubRepoBtn = document.getElementById("githubRepoBtn");
+    const dropboxLinkBtn = document.getElementById("dropboxLinkBtn");
     const folderFileSelect = document.getElementById("folderFileSelect");
     const openFolderFileBtn = document.getElementById("openFolderFileBtn");
     const followMode = document.getElementById("followMode");
@@ -612,18 +616,44 @@ def make_html(rows, html_path):
       }}
     }}
 
-    async function openWorkingFile(fileName) {{
-      if (!fileName) return;
+    async function fetchCsvUrl(url, displayName) {{
       try {{
-        readout.textContent = `Loading ${{fileName}} ...`;
-        const response = await fetch(fileUrl(fileName));
+        readout.textContent = `Loading ${{displayName}} ...`;
+        const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP ${{response.status}}`);
         const text = await response.text();
         const nextRows = rowsFromCsv(text);
-        setDataset(nextRows, fileName);
+        setDataset(nextRows, displayName);
       }} catch (error) {{
         readout.textContent = `CSV load error: ${{error.message}}`;
       }}
+    }}
+
+    async function openWorkingFile(fileName) {{
+      if (!fileName) return;
+      fetchCsvUrl(fileUrl(fileName), fileName);
+    }}
+
+    async function openGithubFile(fileName) {{
+      if (!fileName) return;
+      fetchCsvUrl(githubRawBase + fileUrl(fileName), `GitHub: ${{fileName}}`);
+    }}
+
+    function normalizeDropboxUrl(url) {{
+      const trimmed = url.trim();
+      if (!trimmed) return "";
+      try {{
+        const parsed = new URL(trimmed);
+        if (parsed.hostname.endsWith("dropbox.com")) {{
+          parsed.searchParams.delete("dl");
+          parsed.searchParams.delete("raw");
+          parsed.searchParams.set("raw", "1");
+          return parsed.toString();
+        }}
+      }} catch (error) {{
+        return trimmed;
+      }}
+      return trimmed;
     }}
 
     function drawGrid(L) {{
@@ -954,6 +984,10 @@ def make_html(rows, html_path):
       clampView();
     }}
 
+    localPcBtn.addEventListener("click", () => {{
+      csvFile.click();
+    }});
+
     csvFile.addEventListener("change", async () => {{
       const file = csvFile.files && csvFile.files[0];
       if (!file) return;
@@ -970,6 +1004,16 @@ def make_html(rows, html_path):
 
     openFolderFileBtn.addEventListener("click", () => {{
       openWorkingFile(folderFileSelect.value);
+    }});
+
+    githubRepoBtn.addEventListener("click", () => {{
+      openGithubFile(folderFileSelect.value);
+    }});
+
+    dropboxLinkBtn.addEventListener("click", () => {{
+      const url = normalizeDropboxUrl(prompt("Paste Dropbox CSV shared link", "") || "");
+      if (!url) return;
+      fetchCsvUrl(url, "Dropbox CSV");
     }});
 
     folderFileSelect.addEventListener("change", () => {{
